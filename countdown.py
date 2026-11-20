@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-Hellblazer 40th-anniversary countdown: render the daily post image + caption,
-and publish it to Instagram through the official Graph API.
+Hellblazer 40th-anniversary countdown: build the daily post card + caption so you
+can post it to Instagram yourself.
 
 Commands
-  preview        Render a post locally (no posting).   --issue 47 --today 2027-02-01
-  prepare        Pick the next "Ready" issue, render it into public/posts/, write state/next.json
-  publish        Post whatever `prepare` queued, then record it in state/posted.json
-  refresh-token  Print a fresh 60-day Instagram token (reads IG_ACCESS_TOKEN)
+  preview   Render one issue locally (no commit).   --issue 47 --today 2027-02-01
+  prepare   Build the next "Ready" issue's card into public/posts/ and write NEXT_POST.md
+            (the image + a copy-ready caption, viewable straight from the repo on your phone)
 
 Data source (first match wins): --source, $SHEET_CSV, ./tracker.csv
-  Can be a local .csv/.xlsx file or a URL that returns CSV (e.g. a Google Sheet
-  published to the web as CSV).
+  A local .csv/.xlsx file or a URL that returns CSV (e.g. a Google Sheet
+  published to the web as CSV). Mark an issue's Status "Ready" to queue it;
+  set it to "Posted" after you've posted it.
 """
 from __future__ import annotations
 
@@ -33,9 +33,6 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 ROOT = Path(__file__).resolve().parent
 FONTS = ROOT / "assets" / "fonts"
-STATE_DIR = ROOT / "state"
-POSTED_FILE = STATE_DIR / "posted.json"
-NEXT_FILE = STATE_DIR / "next.json"
 POSTS_DIR = ROOT / "public" / "posts"
 PHOTOS_DIR = ROOT / "photos"
 OUT_DIR = ROOT / "out"
@@ -60,7 +57,7 @@ W, H = 1080, 1350
 BG_TOP, BG_BOTTOM = (6, 9, 14), (13, 27, 42)
 WHITE = (242, 245, 248)
 MUTED = (138, 151, 166)
-BLUE = (42, 163, 240)
+BLUE = (23, 150, 210)   # BatDan brand blue (sampled from the BD logo)
 EMBER = (255, 107, 26)
 GOLD = (255, 200, 61)
 PANEL = (15, 26, 39)
@@ -187,17 +184,6 @@ def load_rows(source: str) -> list[dict]:
         c_tot += r["cigs"]
         r["friends_total"], r["cigs_total"] = f_tot, c_tot
     return rows
-
-
-def load_state() -> dict:
-    if POSTED_FILE.exists():
-        return json.loads(POSTED_FILE.read_text(encoding="utf-8"))
-    return {}
-
-
-def save_state(state: dict) -> None:
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    POSTED_FILE.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 # --------------------------------------------------------------------------- drawing helpers
@@ -417,7 +403,7 @@ def render_post(row: dict, cfg: dict, ctx: dict, out_path: Path, photo: Image.Im
     # header
     draw_tracked(d, 60, 92, cfg["series"], font(ANTON, 56), WHITE, 7)
     draw_tracked(d, 62, 128, "40TH ANNIVERSARY COUNTDOWN", font(SEMI, 25), BLUE, 3.2)
-    badge(img, W - 60 - 88, 40, 88)
+    badge(img, W - 56 - 180, 40, 180)
     d = ImageDraw.Draw(img)
 
     # countdown
@@ -542,66 +528,10 @@ def build_caption(row: dict, cfg: dict, ctx: dict) -> str:
     return "\n".join(parts).strip()[:2150]
 
 
-def build_alt(row: dict, ctx: dict) -> str:
-    bits = [f"Hellblazer issue {row['issue']} reading countdown post, {ctx['days']} days until 22 September 2027."]
-    if row["score"] is not None:
-        bits.append(f"Rated {row['score']:g} out of 5.")
-    if row["take"]:
-        bits.append(row["take"])
-    return " ".join(bits)[:900]
-
-
-# --------------------------------------------------------------------------- Instagram Graph API
-
-def graph(cfg, path, method="POST", **params):
-    url = f"https://graph.instagram.com/{cfg['api_version']}/{path}"
-    for attempt in range(3):
-        try:
-            if method == "GET":
-                r = requests.get(url, params=params, timeout=60)
-            else:
-                r = requests.post(url, data=params, timeout=60)
-        except requests.RequestException as exc:
-            if attempt == 2:
-                raise
-            print(f"network error ({exc}); retrying…", file=sys.stderr)
-            time.sleep(5)
-            continue
-        if r.status_code >= 500 and attempt < 2:
-            time.sleep(5)
-            continue
-        if not r.ok:
-            safe = r.text.replace(params.get("access_token", "\0"), "***")
-            sys.exit(f"Instagram API error {r.status_code} on {method} {path}: {safe}")
-        return r.json()
-    raise RuntimeError("unreachable")
-
-
-def wait_for_image(url: str, tries: int = 12) -> None:
-    for _ in range(tries):
-        try:
-            r = requests.head(url, timeout=15, allow_redirects=True)
-            if r.status_code == 200:
-                return
-        except requests.RequestException:
-            pass
-        time.sleep(5)
-    sys.exit(f"Image still not publicly reachable: {url}")
-
-
 # --------------------------------------------------------------------------- commands
 
 def source_arg(args) -> str:
     return args.source or os.environ.get("SHEET_CSV") or "tracker.csv"
-
-
-def image_base_url() -> str:
-    if os.environ.get("IMAGE_BASE_URL"):
-        return os.environ["IMAGE_BASE_URL"].rstrip("/")
-    repo, ref = os.environ.get("GITHUB_REPOSITORY"), os.environ.get("GITHUB_REF_NAME", "main")
-    if not repo:
-        sys.exit("Set IMAGE_BASE_URL (public URL of public/posts/) when running outside GitHub Actions.")
-    return f"https://raw.githubusercontent.com/{repo}/{ref}/public/posts"
 
 
 def cmd_preview(args):
@@ -619,102 +549,55 @@ def cmd_preview(args):
     print(build_caption(row, cfg, ctx))
 
 
+def write_next_post(row: dict, cfg: dict, ctx: dict, image_rel: str) -> None:
+    """Write NEXT_POST.md (image + copyable caption) and a plain caption .txt."""
+    caption = build_caption(row, cfg, ctx)
+    (POSTS_DIR / f"hb-{row['issue']:03d}.txt").write_text(caption + "\n", encoding="utf-8")
+    md = (
+        f"# 📮 Next post — Hellblazer #{row['issue']}\n\n"
+        f"**{ctx['days']} days to go.**  Save the image, copy the caption, post to Instagram.\n\n"
+        f"![Post card]({image_rel})\n\n"
+        f"### Caption\n\n"
+        f"```\n{caption}\n```\n\n"
+        f"---\n"
+        f"_After you post this, set issue {row['issue']} to **Posted** in your tracker; the next "
+        f"Ready issue then appears here._\n"
+    )
+    (ROOT / "NEXT_POST.md").write_text(md, encoding="utf-8")
+
+
 def cmd_prepare(args):
     cfg = load_config()
-    NEXT_FILE.unlink(missing_ok=True)
-    today = today_for(cfg, args.today)
-    ctx = countdown_ctx(cfg, today)
+    ctx = countdown_ctx(cfg, today_for(cfg, args.today))
     rows = load_rows(source_arg(args))
-    state = load_state()
-    if not args.force and any(v.get("date") == today.isoformat() for v in state.values()):
-        print(f"Already posted for {today}; nothing to do (use --force to post again).")
+    ready = [r for r in rows if r["status"] == "ready"]          # rows are sorted by issue
+    if not ready:
+        (ROOT / "NEXT_POST.md").write_text(
+            "# 📮 Nothing queued\n\nNo issue is marked **Ready** in your tracker.\n\n"
+            "Fill in an issue's score, take, friends and cigs, upload its photo to `photos/`, "
+            "and set its status to **Ready** — the finished post will appear here.\n",
+            encoding="utf-8")
+        print("No issue marked Ready; nothing to build.")
         return
-    pending = [r for r in rows if r["status"] == "ready" and str(r["issue"]) not in state]
-    if not pending:
-        print("::warning::No issue is marked Ready in the tracker, so nothing was posted today.")
-        sys.exit(3)
-    row = pending[0]
+    row = ready[0]
+    POSTS_DIR.mkdir(parents=True, exist_ok=True)
     out = render_post(row, cfg, ctx, POSTS_DIR / f"hb-{row['issue']:03d}.jpg")
-    nxt = {
-        "issue": row["issue"],
-        "date": today.isoformat(),
-        "image_file": str(out.relative_to(ROOT)),
-        "image_url": None if args.no_url else f"{image_base_url()}/{out.name}",
-        "caption": build_caption(row, cfg, ctx),
-        "alt_text": build_alt(row, ctx),
-    }
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    NEXT_FILE.write_text(json.dumps(nxt, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"Queued issue #{row['issue']} -> {out}")
-
-
-def cmd_publish(args):
-    cfg = load_config()
-    if not NEXT_FILE.exists():
-        print("Nothing queued (prepare found nothing to post).")
-        return
-    nxt = json.loads(NEXT_FILE.read_text(encoding="utf-8"))
-    uid, token = os.environ.get("IG_USER_ID"), os.environ.get("IG_ACCESS_TOKEN")
-    if not uid or not token:
-        sys.exit("IG_USER_ID and IG_ACCESS_TOKEN must be set.")
-    wait_for_image(nxt["image_url"])
-    container = graph(cfg, f"{uid}/media", image_url=nxt["image_url"], caption=nxt["caption"],
-                      alt_text=nxt["alt_text"], access_token=token)["id"]
-    for _ in range(12):  # docs suggest polling roughly once a minute, for up to ~5 minutes; images are usually instant
-        status = graph(cfg, container, "GET", fields="status_code", access_token=token).get("status_code")
-        if status == "FINISHED":
-            break
-        if status in ("ERROR", "EXPIRED"):
-            sys.exit(f"Instagram could not process the image (status {status}).")
-        time.sleep(10)
-    else:
-        sys.exit("Timed out waiting for Instagram to process the image.")
-    media_id = graph(cfg, f"{uid}/media_publish", creation_id=container, access_token=token)["id"]
-    try:
-        permalink = graph(cfg, media_id, "GET", fields="permalink", access_token=token).get("permalink", "")
-    except SystemExit:
-        permalink = ""
-    state = load_state()
-    state[str(nxt["issue"])] = {"date": nxt["date"], "media_id": media_id, "permalink": permalink}
-    save_state(state)
-    NEXT_FILE.unlink(missing_ok=True)
-    print(f"Posted issue #{nxt['issue']}: {permalink or media_id}")
-
-
-def cmd_refresh(args):
-    cfg = load_config()
-    token = os.environ.get("IG_ACCESS_TOKEN")
-    if not token:
-        sys.exit("IG_ACCESS_TOKEN must be set.")
-    r = requests.get("https://graph.instagram.com/refresh_access_token",
-                     params={"grant_type": "ig_refresh_token", "access_token": token}, timeout=30)
-    if not r.ok:
-        sys.exit(f"Refresh failed ({r.status_code}): {r.text.replace(token, '***')}")
-    data = r.json()
-    if args.raw:
-        print(data["access_token"])
-    else:
-        print(f"New token valid for {data.get('expires_in', 0) // 86400} days:\n{data['access_token']}")
+    write_next_post(row, cfg, ctx, str(out.relative_to(ROOT)))
+    print(f"Built issue #{row['issue']} -> {out} and NEXT_POST.md")
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
-    for name, fn in (("preview", cmd_preview), ("prepare", cmd_prepare)):
-        sp = sub.add_parser(name)
-        sp.add_argument("--source")
-        sp.add_argument("--today", help="pretend today is YYYY-MM-DD")
-        if name == "preview":
-            sp.add_argument("--issue", type=int)
-        else:
-            sp.add_argument("--force", action="store_true")
-            sp.add_argument("--no-url", action="store_true", help="skip image URL (local testing)")
-        sp.set_defaults(fn=fn)
-    sp = sub.add_parser("publish")
-    sp.set_defaults(fn=cmd_publish)
-    sp = sub.add_parser("refresh-token")
-    sp.add_argument("--raw", action="store_true", help="print only the token")
-    sp.set_defaults(fn=cmd_refresh)
+    sp = sub.add_parser("preview", help="render one issue locally (no commit)")
+    sp.add_argument("--source")
+    sp.add_argument("--today", help="pretend today is YYYY-MM-DD")
+    sp.add_argument("--issue", type=int)
+    sp.set_defaults(fn=cmd_preview)
+    sp = sub.add_parser("prepare", help="build the next Ready issue's card + caption into the repo")
+    sp.add_argument("--source")
+    sp.add_argument("--today", help="pretend today is YYYY-MM-DD")
+    sp.set_defaults(fn=cmd_prepare)
     args = p.parse_args()
     args.fn(args)
 
