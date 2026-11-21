@@ -1,7 +1,6 @@
 name: Build next Hellblazer post
 
 on:
-
   workflow_dispatch:
 
 permissions:
