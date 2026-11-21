@@ -1,13 +1,13 @@
 # 📮 Next post — Hellblazer #1
 
-**306 days to go.**  Save the image, copy the caption, post to Instagram.
+**305 days to go.**  Save the image, copy the caption, post to Instagram.
 
 ![Post card](public/posts/hb-001.jpg)
 
 ### Caption
 
 ```
-☠️ T-MINUS 306 DAYS — Hellblazer #1
+☠️ T-MINUS 305 DAYS — Hellblazer #1
 ★★★½☆  3.5/5
 
 Re-reading this 38 years on and Delano's Constantine still feels genuinely hungry. John's already a magnificent bastard and the template for everything that follows.
