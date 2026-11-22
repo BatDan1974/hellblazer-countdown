@@ -389,6 +389,10 @@ def draw_cover_panel(img, box, row, photo):
 # --------------------------------------------------------------------------- post image + caption
 
 def countdown_ctx(cfg: dict, today: date) -> dict:
+    """Days-to-go is the real number of days from the build date to the
+    anniversary (22 Sep 2027). The number is a live countdown to that fixed
+    date, so cards built on the same day share a number — posting a few issues
+    in one day to catch up is expected and correct."""
     anniv = date.fromisoformat(cfg["anniversary"])
     return {"days": (anniv - today).days, "anniv": anniv, "today": today}
 
