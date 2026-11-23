@@ -1,13 +1,13 @@
 # 📮 Next post — Hellblazer #3
 
-**304 days to go.**  Save the image, copy the caption, post to Instagram.
+**303 days to go.**  Save the image, copy the caption, post to Instagram.
 
 ![Post card](public/posts/hb-003.jpg)
 
 ### Caption
 
 ```
-☠️ T-MINUS 304 DAYS — Hellblazer #3
+☠️ T-MINUS 303 DAYS — Hellblazer #3
 ★★★★☆  4/5
 
 Demon yuppies from hell & Thatchers 1987 General Election. Proper good old bad days..
