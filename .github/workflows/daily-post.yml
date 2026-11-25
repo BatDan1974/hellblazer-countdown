@@ -23,15 +23,23 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      - name: Install ffmpeg (for recap Shorts)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Build the next Ready issue's card and caption
         env:
           SHEET_CSV: ${{ secrets.SHEET_CSV_URL }}
         run: python countdown.py prepare
 
-      - name: Commit the card if it changed
+      - name: Build any completed recap Short (every 5 issues)
+        env:
+          SHEET_CSV: ${{ secrets.SHEET_CSV_URL }}
+        run: python shorts.py --auto
+
+      - name: Commit the card + any new Short if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add NEXT_POST.md public/posts
-          git commit -m "Update next post" || echo "nothing changed"
+          git add NEXT_POST.md public/posts public/shorts
+          git commit -m "Update next post / recap short" || echo "nothing changed"
           git push
