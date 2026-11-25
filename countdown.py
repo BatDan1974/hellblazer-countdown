@@ -90,6 +90,7 @@ HEADER_MAP = {
 }
 
 CLZ_FILE = ROOT / "data" / "clz.csv"   # creators + story arc exported from CLZ (fallback if the tracker has none)
+MUSIC_FILE = ROOT / "data" / "music.csv"   # suggested Instagram track per issue (shown as a reminder in NEXT_POST.md)
 
 
 def norm_header(h) -> str:
@@ -118,6 +119,18 @@ def load_clz() -> dict[int, dict]:
                     "cover_artist": (rec.get("Cover artist") or "").strip(),
                     "story_arc": (rec.get("Story arc") or "").strip(),
                 }
+    return out
+
+
+def load_music() -> dict[int, str]:
+    if not MUSIC_FILE.exists():
+        return {}
+    out: dict[int, str] = {}
+    with open(MUSIC_FILE, newline="", encoding="utf-8-sig") as fh:
+        for rec in csv.DictReader(fh):
+            n = to_int(rec.get("Issue"), 0)
+            if n > 0:
+                out[n] = (rec.get("Track") or "").strip()
     return out
 
 
@@ -174,10 +187,12 @@ def load_rows(source: str) -> list[dict]:
         })
     rows.sort(key=lambda r: r["issue"])
     clz = load_clz()
+    music = load_music()
     for r in rows:  # tracker values win; CLZ fills the gaps; your own "Arc / title" beats CLZ's story arc
         for k in ("writer", "artist", "cover_artist", "story_arc"):
             r[k] = r[k] or clz.get(r["issue"], {}).get(k, "")
         r["arc"] = r["arc"] or r["story_arc"]
+        r["music"] = music.get(r["issue"], "")
     f_tot = c_tot = 0
     for r in rows:  # running totals always follow issue order, whatever the sheet says
         f_tot += r["friends"]
@@ -557,9 +572,11 @@ def write_next_post(row: dict, cfg: dict, ctx: dict, image_rel: str) -> None:
     """Write NEXT_POST.md (image + copyable caption) and a plain caption .txt."""
     caption = build_caption(row, cfg, ctx)
     (POSTS_DIR / f"hb-{row['issue']:03d}.txt").write_text(caption + "\n", encoding="utf-8")
+    music_line = f"🎵 **Suggested track:** {row['music']}  _(add it in Instagram when you post)_\n\n" if row.get("music") else ""
     md = (
         f"# 📮 Next post — Hellblazer #{row['issue']}\n\n"
         f"**{ctx['days']} days to go.**  Save the image, copy the caption, post to Instagram.\n\n"
+        f"{music_line}"
         f"![Post card]({image_rel})\n\n"
         f"### Caption\n\n"
         f"```\n{caption}\n```\n\n"
