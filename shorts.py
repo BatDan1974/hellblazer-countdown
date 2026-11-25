@@ -31,6 +31,17 @@ SHORTS_DIR = C.ROOT / "public" / "shorts"
 FPS = 30
 D_INTRO, D_ISSUE, D_OUTRO, XFADE = 2.6, 4.8, 4.8, 0.5
 
+HASHTAGS = ("#Hellblazer #JohnConstantine #Shorts #DCComics #Vertigo #ComicBooks "
+            "#Constantine #ComicCollector #ComicReview #JamieDelano #BatDan")
+TAGS = (
+    "hellblazer, john constantine, constantine, hellblazer comic, hellblazer vol 1, "
+    "dc comics, vertigo comics, vertigo, comic books, comic book collection, "
+    "comic collecting, comic book review, comic book countdown, reading challenge, "
+    "hellblazer 40th anniversary, jamie delano, john ridgway, dave mckean, "
+    "occult comics, horror comics, 1980s comics, british comics, graphic novels, "
+    "comic book youtube, batdan"
+)
+
 
 # --------------------------------------------------------------------------- frame helpers
 
@@ -225,8 +236,37 @@ def build(milestone: int, source: str, require_posted: bool = False, rows: dict 
     out = SHORTS_DIR / f"hb-{lo:03d}-{hi:03d}.mp4"
     encode(frames, durs, out)
     shutil.rmtree(tmp, ignore_errors=True)
+    write_short_meta(cfg, issues, out.with_suffix(".txt"))
     print(f"Short -> {out}")
     return out
+
+
+def write_short_meta(cfg: dict, issues: list[dict], out_txt: Path) -> None:
+    """Ready-to-paste YouTube title, description (with hashtags) and tags."""
+    lo, hi = issues[0]["issue"], issues[-1]["issue"]
+    total = cfg["total_issues"]
+    f_tot, c_tot = issues[-1]["friends_total"], issues[-1]["cigs_total"]
+    scored = [r for r in issues if r.get("score") is not None]
+    best = max(scored, key=lambda r: r["score"]) if scored else None
+    anniv = C.date.fromisoformat(cfg["anniversary"]).strftime("%d %b %Y").lstrip("0")
+    opener = "The first five issues of Hellblazer, down." if lo == 1 else \
+             f"Hellblazer issues {lo}–{hi}, done."
+    pick = f"\n⭐ Pick of the five: #{best['issue']} ({best['score']:g}/5)" if best else ""
+    title = f"Hellblazer #{lo}–{hi} Recap | Reading All 300 Before the 40th Anniversary"
+    desc = (
+        f"{opener} {total - hi} to go before John Constantine's solo debut turns 40 on {anniv}.\n\n"
+        f"🔥 Friends burned so far: {f_tot}\n"
+        f"🚬 Cigs smoked so far: {c_tot}{pick}\n\n"
+        f"Daily countdown on Instagram → {cfg['handle']}\n"
+        f"Comic reviews, art & toys → BatDan on YouTube\n\n"
+        f"{HASHTAGS}"
+    )
+    body = (
+        f"==================  TITLE  (copy)  ==================\n{title}\n\n"
+        f"==============  DESCRIPTION  (copy)  ================\n{desc}\n\n"
+        f"=================  TAGS  (copy)  ====================\n{TAGS}\n"
+    )
+    out_txt.write_text(body, encoding="utf-8")
 
 
 def build_auto(source: str) -> list[Path]:
