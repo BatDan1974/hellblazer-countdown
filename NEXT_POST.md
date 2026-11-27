@@ -1,6 +1,6 @@
 # 📮 Next post — Hellblazer #6
 
-**300 days to go.**  Save the image, copy the caption, post to Instagram.
+**299 days to go.**  Save the image, copy the caption, post to Instagram.
 
 🎵 **Suggested track:** Orbital — Belfast  _(add it in Instagram when you post)_
 
@@ -9,7 +9,7 @@
 ### Caption
 
 ```
-☠️ T-MINUS 300 DAYS — Hellblazer #6
+☠️ T-MINUS 299 DAYS — Hellblazer #6
 ★★★½☆  3.5/5
 
 Back in London, Neo nazi Arsenal and Chelsea footie hooligans come together; Resurrection Crusaders come for Zed; John and Zed get 'friendly'.
